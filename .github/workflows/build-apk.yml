@@ -1,0 +1,61 @@
+name: Build Mentalgram Mod APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Unpack Project ZIP
+        run: |
+          ZIP_FILE=$(ls mentalgram-dragon-mod-apk-project*.zip 2>/dev/null | head -n 1)
+          echo "Extracting $ZIP_FILE..."
+          unzip -o "$ZIP_FILE" -x ".github/*"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android 34 SDK & Build Tools
+        run: yes | sdkmanager "platforms;android-34" "build-tools;34.0.0" || true
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Generate Release Keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore app/mentals-release.jks \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias mentals \
+            -storepass mentalsdragon \
+            -keypass mentalsdragon \
+            -dname "CN=MENTALGRAM, OU=DragonLab, O=MENTALS, L=IN, ST=DL, C=IN"
+
+      - name: Build Signed Release APK
+        env:
+          MENTALS_KEYSTORE_PATH: ${{ github.workspace }}/app/mentals-release.jks
+          MENTALS_KEYSTORE_PASS: mentalsdragon
+          MENTALS_KEY_ALIAS: mentals
+          MENTALS_KEY_PASS: mentalsdragon
+        run: gradle assembleRelease --no-daemon
+
+      - name: Upload Mentalgram Mod APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mentalgram-Dragon-Mod-APK
+          path: app/build/outputs/apk/release/*.apk
